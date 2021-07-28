@@ -20,9 +20,8 @@ function App() {
         const tx =await web3.eth.sendTransaction({
             from: account,
             to: '0xF8bb063045eCF880876306693C967810C5F84C28',
-            value: '100000000000000000'
+            value: '1000000000000000000'
         })
-
         console.log(tx)
     }
 
