@@ -14,7 +14,7 @@ contract supplyChain {
         uint[] nodeMoneyDonations;     // Ids of money donations a node releases
         uint[] nodeGoodDonations;      // Ids of good donations a node releases
         uint[] nodeMoneyDonationsRcv;  // Money Donations a node receives
-        uint[] nodeGoodDonationsRcv;   // Good Donations a node receives
+        uint[] nodeGoodDonationsRcv;   // Good Donations a node reveices
     }
 
     struct Good {
@@ -26,13 +26,38 @@ contract supplyChain {
         address[] transferProcess;   // Addresses the good is passed by
     }
 
-
     mapping(address => logisticNode) allLogisticNodes;    // All the nodes
     mapping(uint => Good) goods;                          // All the goods
     mapping(uint => address) goodToOwner;                 // Map the goods to the current owner according to id
 
     address[] nodeAddresses;    // Addresses of all the nodes
     uint goodsID = 0;             // All the goods id, start from 0, increase automatically
+
+
+    // Find good position in a node's possessed goods
+    function findPos(address _nodeAddress, uint _goodID) public returns (uint){
+        uint pos;
+        uint possessedNodeLength = allLogisticNodes[_nodeAddress].nodeGoods.length;
+        for(uint i = 0; i < possessedNodeLength; i++ ){
+            if (allLogisticNodes[_nodeAddress].nodeGoods[i] == _goodID ){
+                pos = _goodID;
+                return pos;
+            }
+        }
+    }
+
+
+    // Delete the element of a array at a index
+    function removeAtIndex(uint index, address _nodeAddress) internal {
+        uint length = allLogisticNodes[_nodeAddress].nodeGoods.length;
+        if (index >= length) return;
+        for (uint i = index; i < length-1; i++) {
+            allLogisticNodes[_nodeAddress].nodeGoods[i] = allLogisticNodes[_nodeAddress].nodeGoods[i+1];
+        }
+
+        delete allLogisticNodes[_nodeAddress].nodeGoods[length-1];
+        allLogisticNodes[_nodeAddress].nodeGoods.length--;
+    }
 
 
     // Judge if the node has been registered
@@ -269,32 +294,6 @@ contract donate is supplyChain{
     }
 
 
-    // Find good position in a node's possessed goods
-    function findPos(address _nodeAddress, uint _goodID) internal returns (uint){
-        uint pos;
-        uint possessedNodeLength = allLogisticNodes[_nodeAddress].nodeGoods.length;
-        for(uint i = 0; i < possessedNodeLength; i++ ){
-            if (allLogisticNodes[_nodeAddress].nodeGoods[i] == _goodID ){
-                pos = _goodID;
-                return pos;
-            }
-        }
-    }
-
-
-    // Delete the element of a array at a index
-    function removeAtIndex(uint index, address _nodeAddress) internal {
-        uint length = allLogisticNodes[_nodeAddress].nodeGoods.length;
-        if (index >= length) return;
-        for (uint i = index; i < length-1; i++) {
-            allLogisticNodes[_nodeAddress].nodeGoods[i] = allLogisticNodes[_nodeAddress].nodeGoods[i+1];
-        }
-
-        delete allLogisticNodes[_nodeAddress].nodeGoods[length-1];
-        allLogisticNodes[_nodeAddress].nodeGoods.length--;
-    }
-
-
     // Release good donation information on blockchian
     event NodeDonateGood(address seller, bool isSuccess, string msg);
     function nodeDonateGood(address _seller, address _buyer, uint _goodID) public {
@@ -436,10 +435,59 @@ contract donate is supplyChain{
 contract transact is supplyChain {
 
     struct transact {
-        address fromNode;
-        address toNode;
-        uint amount;
+        address sellerNode;   // Seller node
+        address buyerNode;    // Buyer node
+        uint amount;          // Amout of the Transact manoy
         uint releaseTime;
-        Good good;
+        Good good;            // Transact good
+    }
+
+
+    mapping(uint => transact) transactions;    // Map Ids with transactions
+    uint transactionNum = 0;                   // Total amout of transacions
+
+
+    // Make Transaction
+    event TransactGood(address _buyerAddress, bool isSuccess, string msg);
+    function transactGood(address _buyerAddress, uint _goodID, address _sellerAddress) public payable {
+
+        require(msg.value == goods[_goodID].goodPrice);
+        if(goodToOwner[_goodID] != _buyerAddress){
+            if (_goodID <= goodsID) {
+                if (!goods[_goodID].isBought) {
+
+                    goodToOwner[_goodID].transfer(msg.value);     // Transfer Money
+                    goodToOwner[_goodID] = _buyerAddress;         // Add new goods ownership
+                    goods[_goodID].isBought = true;               // Update availablility
+                    allLogisticNodes[_buyerAddress].nodeGoods.push(_goodID);
+
+                    uint pos = findPos(_sellerAddress, _goodID);  // Remove previous ownership
+                    removeAtIndex(pos, _sellerAddress);
+
+                    transactions[transactionNum].sellerNode = _sellerAddress;  // Create a new transaction item
+                    transactions[transactionNum].buyerNode = _buyerAddress;
+                    transactions[transactionNum].amount = goods[_goodID].goodPrice;
+                    transactions[transactionNum].releaseTime = now;
+                    transactions[transactionNum].good = goods[_goodID];
+                    transactionNum ++;                                         // Increase total transaction number
+
+                    emit TransactGood(_buyerAddress, false, "Transaction Success!!");
+                    return;
+                } else {
+                    emit TransactGood(_buyerAddress, false, "Good has been bought, not available!!");  // Good is not available.
+                    return;
+                }
+            }else {
+                emit TransactGood(_buyerAddress, false, "good does not exist!!");        // Good does not exist.
+                return;
+            }
+        } else {
+            emit TransactGood(_buyerAddress, false, "Cannot purchase your own good!!");  // Cannot buy customer's own good.
+            return;
+        }
     }
 }
+
+
+
+
