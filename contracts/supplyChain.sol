@@ -1,11 +1,8 @@
-pragma solidity ^0.4.24;
+// pragma solidity ^0.4.24;
 pragma experimental ABIEncoderV2;
 
-contract utils {
 
-}
-
-contract supplyChain is utils{
+contract supplyChain {
 
     struct logisticNode {
         address nodeAddress;         // Adress of the node
@@ -17,24 +14,25 @@ contract supplyChain is utils{
         uint[] nodeMoneyDonations;     // Ids of money donations a node releases
         uint[] nodeGoodDonations;      // Ids of good donations a node releases
         uint[] nodeMoneyDonationsRcv;  // Money Donations a node receives
-        uint[] nodeGoodDonationsRcv;   // Good Donations a node reveices
+        uint[] nodeGoodDonationsRcv;   // Good Donations a node receives
     }
 
     struct Good {
         uint goodID;                 // Good ID
         string goodName;             // Good Name
         uint goodPrice;              // Good price
-        bool isBought;               // Whethmoneymoneyer the good is isBought
+        bool isBought;               // Whether the good is isBought
         uint releaseTime;            // Good release time
         address[] transferProcess;   // Addresses the good is passed by
     }
+
 
     mapping(address => logisticNode) allLogisticNodes;    // All the nodes
     mapping(uint => Good) goods;                          // All the goods
     mapping(uint => address) goodToOwner;                 // Map the goods to the current owner according to id
 
     address[] nodeAddresses;    // Addresses of all the nodes
-    uint[] goodsID;             // All the goods id
+    uint goodsID = 0;             // All the goods id, start from 0, increase automatically
 
 
     // Judge if the node has been registered
@@ -46,18 +44,6 @@ contract supplyChain is utils{
             }
         }
         return isRegistered;
-    }
-
-
-    // Judge if the good has existed
-    function isGoodExist(uint _goodID) internal view returns (bool){
-        bool isExist = false;
-        for(uint i = 0; i < goodsID.length; i++){
-            if(goodsID[i] == _goodID){
-                return isExist = true;
-            }
-        }
-        return isExist;
     }
 
 
@@ -83,34 +69,29 @@ contract supplyChain is utils{
     // Node publish goods
     event NodePublishGood(address _nodeAddress, bool isSuccess, string message);
     // @Param: _nodeAddress, goodID, goodname, good price, releaseTime
-    function nodePublishGood(address _nodeAddress, uint _goodID, string _goodName, uint _goodPrice) public{
+    function nodePublishGood(address _nodeAddress, string _goodName, uint _goodPrice) public{
         if (!isNodeRegistered(_nodeAddress)){
 
             emit NodePublishGood(_nodeAddress, false, "Node not registered!!");
 
         } else {
-            if (!isGoodExist(_goodID)){
 
-                goods[_goodID].goodID = _goodID;                                // Publish goods into
-                goods[_goodID].goodName = _goodName;
-                goods[_goodID].releaseTime = now;
-                goods[_goodID].goodPrice = _goodPrice;
-                goods[_goodID].isBought = false;
-                goods[_goodID].transferProcess.push(_nodeAddress);
-                goodsID.push(_goodID);                                          // Add the new good to goods repository
+            goods[goodsID].goodID = goodsID;                                // Add a new good
+            goods[goodsID].goodName = _goodName;
+            goods[goodsID].releaseTime = now;
+            goods[goodsID].goodPrice = _goodPrice;
+            goods[goodsID].isBought = false;
+            goods[goodsID].transferProcess.push(_nodeAddress);              // Add the new good to goods repository
 
-                allLogisticNodes[_nodeAddress].merchantGoods.push(_goodID);     // Update the ownership
-                allLogisticNodes[_nodeAddress].nodeGoods.push(_goodID);
-                goodToOwner[_goodID] = _nodeAddress;
-
-                emit NodePublishGood(_nodeAddress, true, "Publish Success!");
-                return;
-            }else {
-                emit NodePublishGood(_nodeAddress, false, "Publish failed, ID already exist, please input another ID.");
-                return;
-            }
+            allLogisticNodes[_nodeAddress].merchantGoods.push(goodsID);     // Update the ownership
+            allLogisticNodes[_nodeAddress].nodeGoods.push( goodsID);
+            goodToOwner[goodsID] = _nodeAddress;
+            goodsID++;
+            emit NodePublishGood(_nodeAddress, true, "Publish Success!");
+            return;
         }
     }
+
 
 
     // Node transfer goods
@@ -123,7 +104,7 @@ contract supplyChain is utils{
             if (isNodeRegistered(_to)){
                 //goodToOwner[_goodID] = _to;                     // Add a mapping relation
                 //allLogisticNodes[_to].nodeGoods.push(_goodID);  // Chango the ownership of the good
-                goods[_goodID].transferProcess.push(_to);       // Add a transferProcess for the exchanged good
+                goods[_goodID].transferProcess.push(_to);         // Add a transferProcess for the exchanged good
 
                 emit NodeTransferGood(_from, true, "Transfer Success!");
                 return;
@@ -138,9 +119,9 @@ contract supplyChain is utils{
     // Get a node's possessed goods
     // @Returns uint: numbers of the goods a node posseses. uint[]: Ids of goods. string[],
     //  names of the possessed goods. uint[]: goods prices. address[]: addresses of the owners
-    // @Param _nodeAddress: address of the passed node
+    // @Param _nodeAddress: address of the node passed-in
     function getPossessedGoods(address _nodeAddress) constant public returns(uint, uint[] , string[], uint[] ,address[]){
-        uint length = allLogisticNodes[_nodeAddress].merchantGoods.length;
+        uint length = allLogisticNodes[_nodeAddress].nodeGoods.length;
         string[] memory goodsNames = new string[](length);
         uint[] memory goodsPrices = new uint[](length);
         address[] memory owners = new address[](length);
@@ -158,14 +139,16 @@ contract supplyChain is utils{
     // Get a node's releaseGoods
     // @Returns uint[]: Ids of goods. string[], names of the possessed goods
     // @Param _nodeAddress: address of the passed node
-    function getReleaseGoods(address _nodeAddress) constant public returns(uint[], string[]){
+    function getReleaseGoods(address _nodeAddress) constant public returns(uint[], string[], uint[]){
         uint length = allLogisticNodes[_nodeAddress].nodeGoods.length;
         string[] memory goodsNames = new string[](length);
+        uint[] memory prices = new uint[](length);
 
         for(uint i=0;i < length;i++){
             goodsNames[i] = goods[allLogisticNodes[_nodeAddress].nodeGoods[i]].goodName;    // Get each good's name via mapping
+            prices[i] = goods[allLogisticNodes[_nodeAddress].nodeGoods[i]].goodPrice;
         }
-        return (allLogisticNodes[_nodeAddress].merchantGoods, goodsNames);
+        return (allLogisticNodes[_nodeAddress].merchantGoods, goodsNames, prices);
     }
 
 
@@ -177,17 +160,17 @@ contract supplyChain is utils{
 
     // Get all the goods
     function getAllGoods() constant public returns(uint, string[], uint[], address[]){
-        uint length = goodsID.length;
-        string[] memory goodsNames = new string[](length);
-        uint[] memory goodsPrices = new uint[](length);
-        address[] memory goodsOwners = new address[](length);
 
-        for(uint i=0; i< length; i++){
-            goodsNames[i] = goods[goodsID[i]].goodName;
-            goodsPrices[i] = goods[goodsID[i]].goodPrice;
-            goodsOwners[i] = goodToOwner[goodsID[i]];
+        string[] memory goodsNames = new string[](goodsID);
+        uint[] memory goodsPrices = new uint[](goodsID);
+        address[] memory goodsOwners = new address[](goodsID);
+
+        for(uint i=0; i< goodsID; i++){
+            goodsNames[i] = goods[i].goodName;
+            goodsPrices[i] = goods[i].goodPrice;
+            goodsOwners[i] = goodToOwner[i];
         }
-        return (length,goodsNames,goodsPrices,goodsOwners);
+        return (goodsID,goodsNames,goodsPrices,goodsOwners);
     }
 
 
@@ -286,6 +269,32 @@ contract donate is supplyChain{
     }
 
 
+    // Find good position in a node's possessed goods
+    function findPos(address _nodeAddress, uint _goodID) internal returns (uint){
+        uint pos;
+        uint possessedNodeLength = allLogisticNodes[_nodeAddress].nodeGoods.length;
+        for(uint i = 0; i < possessedNodeLength; i++ ){
+            if (allLogisticNodes[_nodeAddress].nodeGoods[i] == _goodID ){
+                pos = _goodID;
+                return pos;
+            }
+        }
+    }
+
+
+    // Delete the element of a array at a index
+    function removeAtIndex(uint index, address _nodeAddress) internal {
+        uint length = allLogisticNodes[_nodeAddress].nodeGoods.length;
+        if (index >= length) return;
+        for (uint i = index; i < length-1; i++) {
+            allLogisticNodes[_nodeAddress].nodeGoods[i] = allLogisticNodes[_nodeAddress].nodeGoods[i+1];
+        }
+
+        delete allLogisticNodes[_nodeAddress].nodeGoods[length-1];
+        allLogisticNodes[_nodeAddress].nodeGoods.length--;
+    }
+
+
     // Release good donation information on blockchian
     event NodeDonateGood(address seller, bool isSuccess, string msg);
     function nodeDonateGood(address _seller, address _buyer, uint _goodID) public {
@@ -294,7 +303,11 @@ contract donate is supplyChain{
             return;
         } else {
             if (isNodeRegistered(_buyer)){
+
+                uint pos = findPos(_seller, _goodID);
+
                 goodToOwner[_goodID] = _buyer;                              // Add a mapping relation
+                removeAtIndex(pos, _seller);                                // Remove seller's ownership
                 allLogisticNodes[_buyer].nodeGoods.push(_goodID);           // Change the ownership of the good
 
                 goodDonations[goodDonationNumber].ID = goodDonationNumber;  // Add a goodDonation obj
@@ -329,6 +342,7 @@ contract donate is supplyChain{
         }
         return (length, IDs);
     }
+
 
     // Return available good donation ID
     function returnAvailableGoodDonationId() internal returns(uint, uint[]){
@@ -408,12 +422,24 @@ contract donate is supplyChain{
         bool[] memory donationStatus = new bool[](goodDonationNumber);
         uint[] memory releaseTimes = new uint[](goodDonationNumber);
 
-        for(uint i = 0; i < goodDonationNumber; i ++){           // Add Good donation information
+        for(uint i = 0; i < goodDonationNumber; i ++){             // Add Good donation information
             Goods[i] = goodDonations[i].good;
             addresses[i] = goodDonations[i].transferProcess[0];
             releaseTimes[i] = goodDonations[i].releaseTime;
             donationStatus[i] = goodDonations[i].isTransferred;
         }
-        return(moneyDonationNumber, Goods, releaseTimes, addresses);
+        return(goodDonationNumber, Goods, releaseTimes, addresses);
+    }
+}
+
+
+contract transact is supplyChain {
+
+    struct transact {
+        address fromNode;
+        address toNode;
+        uint amount;
+        uint releaseTime;
+        Good good;
     }
 }
