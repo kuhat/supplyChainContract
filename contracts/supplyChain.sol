@@ -1,4 +1,4 @@
-// pragma solidity ^0.4.24;
+pragma solidity ^0.4.24;
 pragma experimental ABIEncoderV2;
 
 
@@ -24,13 +24,15 @@ contract supplyChain {
         bool isBought;               // Whether the good is isBought
         uint releaseTime;            // Good release time
         address[] transferProcess;   // Addresses the good is passed by
+        uint class;                  // Type of the good: 0 represents food supply, 1 represents daily goods,
+        // 2 represents Tools, 3 represents communication equipments
     }
 
     mapping(address => logisticNode) allLogisticNodes;    // All the nodes
-    mapping(uint => Good) goods;                          // All the goods
+    mapping(uint => Good) goods;                          // All the goods 
     mapping(uint => address) goodToOwner;                 // Map the goods to the current owner according to id
 
-    address[] nodeAddresses;    // Addresses of all the nodes
+    address[] nodeAddresses;      // Addresses of all the nodes
     uint goodsID = 0;             // All the goods id, start from 0, increase automatically
 
 
@@ -72,7 +74,7 @@ contract supplyChain {
     }
 
 
-    // Node register
+    // Node register 
     event RegisterNode(address _nodeAddress, bool isSuccess, string message);
     // @Param: _nodeAddress, _nodeName and __nodePassword
     function registerNode(address _nodeAddress, string _nodeName, string _nodePassword) public {
@@ -94,19 +96,20 @@ contract supplyChain {
     // Node publish goods
     event NodePublishGood(address _nodeAddress, bool isSuccess, string message);
     // @Param: _nodeAddress, goodID, goodname, good price, releaseTime
-    function nodePublishGood(address _nodeAddress, string _goodName, uint _goodPrice) public{
+    function nodePublishGood(address _nodeAddress, string _goodName, uint _goodPrice, uint _class) public{
         if (!isNodeRegistered(_nodeAddress)){
 
             emit NodePublishGood(_nodeAddress, false, "Node not registered!!");
 
         } else {
 
-            goods[goodsID].goodID = goodsID;                                // Add a new good
+            goods[goodsID].goodID = goodsID;                                // Add a new good 
             goods[goodsID].goodName = _goodName;
             goods[goodsID].releaseTime = now;
             goods[goodsID].goodPrice = _goodPrice;
             goods[goodsID].isBought = false;
             goods[goodsID].transferProcess.push(_nodeAddress);              // Add the new good to goods repository
+            goods[goodsID].class = _class;
 
             allLogisticNodes[_nodeAddress].merchantGoods.push(goodsID);     // Update the ownership
             allLogisticNodes[_nodeAddress].nodeGoods.push( goodsID);
@@ -116,7 +119,6 @@ contract supplyChain {
             return;
         }
     }
-
 
 
     // Node transfer goods
@@ -199,6 +201,25 @@ contract supplyChain {
     }
 
 
+    // Get goods according to class
+    function getClassGoods(uint _class) constant public returns(uint, string[], uint[], address[]){
+        string[] memory goodsNames = new string[](goodsID);
+        uint[] memory goodsPrices = new uint[](goodsID);
+        address[] memory goodsOwners = new address[](goodsID);
+        uint number = 0;
+
+        for (uint i = 0; i < goodsID; i++){  // filter goods class though class id
+            if (goods[i].class == _class){
+                number ++;
+                goodsNames[i] = goods[i].goodName;
+                goodsPrices[i] = goods[i].goodPrice;
+                goodsOwners[i] = goodToOwner[i];
+            }
+        }
+        return (number, goodsNames, goodsPrices, goodsOwners);
+    }
+
+
     // Get the price of a particular good
     function getPrice(uint _goodID) constant public returns(uint){
         return goods[_goodID].goodPrice;
@@ -220,7 +241,7 @@ contract supplyChain {
 
 contract donate is supplyChain{
 
-    struct moneyDonation {           // Donation based on money
+    struct moneyDonation {           // Donation based on money 
         uint ID;
         uint amount;
         bool isTransferred;
@@ -246,7 +267,7 @@ contract donate is supplyChain{
     uint goodDonationNumber = 0;
 
 
-    // Release money donation infomation on blockchain
+    // Release money donation infomation on blockchain 
     event PublishMoney(address _nodeAddress, bool isSuccess, string msg);
     function publishMoney(address _nodeAddress, uint _amount) public {
         if (!isNodeRegistered(_nodeAddress)){
@@ -256,7 +277,7 @@ contract donate is supplyChain{
                 emit PublishMoney(_nodeAddress, false, "Please donate a valid amount!");
             } else {
 
-                moneyDonations[moneyDonationNumber].ID = moneyDonationNumber;                 // Add the new donation to repository
+                moneyDonations[moneyDonationNumber].ID = moneyDonationNumber;                 // Add the new donation to repository 
                 moneyDonations[moneyDonationNumber].amount = _amount;
                 moneyDonations[moneyDonationNumber].isTransferred = false;
                 moneyDonations[moneyDonationNumber].releaseTime = now;
@@ -264,7 +285,7 @@ contract donate is supplyChain{
 
                 moneyDonationToNode[moneyDonationNumber] = _nodeAddress;                      // Add the donation ownership
 
-                allLogisticNodes[_nodeAddress].nodeMoneyDonations.push(moneyDonationNumber);  // Add the Money donation Id to Node
+                allLogisticNodes[_nodeAddress].nodeMoneyDonations.push(moneyDonationNumber);  // Add the Money donation Id to Node 
                 moneyDonationNumber ++;                                                       // Increase MoneyDonation ID
                 emit PublishMoney(_nodeAddress, true, "Donation success!!");
             }
@@ -389,15 +410,42 @@ contract donate is supplyChain{
         address[] memory donatorAddresses = new address[](length);
 
         for(uint i = 0; i < length; i++){                         // Get informations of available money donations
-            goods[i] = goodDonations[i].good;
-            releaseTimes[i] = goodDonations[i].releaseTime;
-            donatorAddresses[i] = goodDonations[i].transferProcess[0];
+            goods[i] = goodDonations[IDs[i]].good;
+            releaseTimes[i] = goodDonations[IDs[i]].releaseTime;
+            donatorAddresses[i] = goodDonations[IDs[i]].transferProcess[0];
         }
         return (length, goods, releaseTimes, donatorAddresses);
     }
 
 
-    // Get all the money donations
+    // Get available good donation based on class 
+    function getAvailableGoodClassDonation(uint _class) public view returns(uint, Good[], uint[], address[]){
+
+        uint length;
+        uint[] memory IDs;
+        (length, IDs) = returnAvailableGoodDonationId();
+        uint classGoodsNum;
+
+        Good[] memory classGoods = new Good[](length);
+        uint[] memory releaseTimes = new uint[](length);
+        address[] memory donatorAddresses = new address[](length);
+        uint availableClassifiedGoodsAmount = 0;
+
+        for(uint i = 0; i < length; i++){
+            if(goodDonations[IDs[i]].good.class == _class){
+                classGoods[i] = goodDonations[IDs[i]].good;
+                releaseTimes[i] = goodDonations[IDs[i]].releaseTime;
+                donatorAddresses[i] = goodDonations[IDs[i]].transferProcess[0];
+                availableClassifiedGoodsAmount ++;
+            }
+
+        }
+        return (availableClassifiedGoodsAmount, classGoods, releaseTimes, donatorAddresses);
+    }
+
+
+
+    // Get all the money donations 
     function getMoneyDonations() public view returns(uint, uint[], uint[], address[]){
         uint[] memory donationsAmounts = new uint[](moneyDonationNumber);
         address[] memory addresses = new address[](moneyDonationNumber);
@@ -437,7 +485,7 @@ contract transact is supplyChain {
     struct transact {
         address sellerNode;   // Seller node
         address buyerNode;    // Buyer node
-        uint amount;          // Amout of the Transact manoy
+        uint amount;          // Amout of the Transact manoy 
         uint releaseTime;
         Good good;            // Transact good
     }
@@ -487,7 +535,3 @@ contract transact is supplyChain {
         }
     }
 }
-
-
-
-
